@@ -1,11 +1,11 @@
-"""Redis connection pool — OTP storage only in MVP. Placeholder.
-See progress.md → Backend — Core → "Redis connection pool — OTP only".
-"""
+"""Redis connection pool — OTP storage only in MVP."""
 
 from redis.asyncio import Redis
 
-redis_pool: Redis
+from app.core.config import settings
+
+redis_pool: Redis = Redis.from_url(settings.REDIS_URL, decode_responses=True)
 
 
 async def get_redis() -> Redis:
-    ...
+    return redis_pool

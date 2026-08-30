@@ -1,4 +1,4 @@
-"""Pydantic Settings config — placeholder. See progress.md → Backend — Core."""
+"""Pydantic Settings config — single source of truth for app configuration."""
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -22,5 +22,12 @@ class Settings(BaseSettings):
     ENVIRONMENT: str
     MIN_APP_VERSION: str
 
+    # CORS — comma-separated list of allowed origins
+    CORS_ORIGINS: str = "http://localhost:8081,http://localhost:19006"
 
-settings: Settings
+    @property
+    def cors_origins_list(self) -> list[str]:
+        return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
+
+
+settings = Settings()

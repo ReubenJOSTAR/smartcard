@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  DATABASE_URL: postgresql+asyncpg://smartcart:smartcart_local@localhost:5432/smartcart
+  REDIS_URL: redis://localhost:6379
+  TWILIO_ACCOUNT_SID: ci-dummy
+  TWILIO_AUTH_TOKEN: ci-dummy
+  TWILIO_VERIFY_SERVICE_SID: ci-dummy
+  SECRET_KEY: ci-dummy
+  ENVIRONMENT: development
+  MIN_APP_VERSION: 1.0.0
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: smartcart
+          POSTGRES_USER: smartcart
+          POSTGRES_PASSWORD: smartcart_local
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U smartcart"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    defaults:
+      run:
+        working-directory: api
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: alembic upgrade head
+        run: alembic upgrade head
+
+      - name: pytest
+        run: pytest tests/ -v --cov=app --cov-report=term-missing
+
+      - name: mypy
+        run: mypy app/
+
+      - name: ruff
+        run: ruff check app/
