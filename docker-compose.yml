@@ -1,0 +1,36 @@
+# MVP docker-compose.yml — keep it simple
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: smartcart
+      POSTGRES_USER: smartcart
+      POSTGRES_PASSWORD: smartcart_local
+    ports: ["5432:5432"]
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]   # OTP storage only in MVP
+
+  api:
+    build: ./api
+    env_file: .env
+    depends_on: [postgres, redis]
+    ports: ["8000:8000"]
+
+  # ── Add these in R2 when building receipt OCR ──────────────────
+  # minio:
+  #   image: minio/minio
+  #   command: server /data --console-address ":9001"
+  #   environment:
+  #     MINIO_ROOT_USER: smartcart_local
+  #     MINIO_ROOT_PASSWORD: smartcart_local
+  #   ports:
+  #     - "9000:9000"
+  #     - "9001:9001"
+  #
+  # celery:
+  #   build: ./api
+  #   command: celery -A app.workers.celery_app worker --loglevel=info
+  #   env_file: .env
+  #   depends_on: [postgres, redis, minio]
