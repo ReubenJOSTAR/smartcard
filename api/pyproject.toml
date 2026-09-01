@@ -9,6 +9,8 @@ disallow_untyped_defs = true
 ignore_missing_imports = true
 # Placeholder/stub functions across the codebase intentionally have `...` bodies
 # with no logic yet (see progress.md) — don't flag those as errors.
+# Remove this once all stub functions across the codebase are implemented — tracked
+# in progress.md Decisions Log.
 disable_error_code = ["empty-body"]
 
 [tool.ruff]
