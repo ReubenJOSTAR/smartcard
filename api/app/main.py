@@ -1,5 +1,7 @@
 """FastAPI app factory — CORS, global exception handlers, router registration."""
 
+import logging
+
 from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
@@ -9,6 +11,12 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.config import settings
 from app.routers import account, auth, config, history, products, receipts, sessions, stores
+
+# Uvicorn configures its own "uvicorn"/"uvicorn.access" loggers but leaves the root
+# logger unconfigured, so app-level `logging.getLogger(__name__).info(...)` calls
+# (e.g. the dev-mock OTP log) would otherwise be silently dropped instead of reaching
+# the console.
+logging.basicConfig(level=logging.INFO if settings.ENVIRONMENT == "development" else logging.WARNING)
 
 
 def create_app() -> FastAPI:

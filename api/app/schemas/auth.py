@@ -1,15 +1,24 @@
-"""Auth request/response schemas — placeholder. See progress.md → Backend — Auth."""
+"""Auth request/response schemas."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+E164_PATTERN = r"^\+[1-9]\d{7,14}$"
 
 
 class SendOTPRequest(BaseModel):
-    pass
+    phone: str = Field(pattern=E164_PATTERN, description="E.164 phone number, e.g. +919876543210")
+
+
+class SendOTPResponse(BaseModel):
+    message: str
 
 
 class VerifyOTPRequest(BaseModel):
-    pass
+    phone: str = Field(pattern=E164_PATTERN)
+    otp: str = Field(pattern=r"^\d{6}$")
 
 
 class TokenResponse(BaseModel):
-    pass
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"

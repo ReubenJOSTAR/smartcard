@@ -1,11 +1,26 @@
-"""Product request/response schemas — placeholder. See progress.md → Backend — Products."""
+"""Product request/response schemas."""
 
-from pydantic import BaseModel
+import uuid
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ProductCreate(BaseModel):
-    pass
+    barcode: str = Field(min_length=1, max_length=32)
+    name: str = Field(min_length=1, max_length=255)
+    brand: str | None = None
+    category: str | None = None
+    price_paise: int | None = Field(default=None, gt=0)
+    store_id: uuid.UUID | None = None
 
 
 class ProductResponse(BaseModel):
-    pass
+    model_config = ConfigDict(from_attributes=True)
+
+    barcode: str
+    name: str
+    brand: str | None
+    category: str | None
+    price_paise: int | None
+    confidence_score: float
+    source: str | None

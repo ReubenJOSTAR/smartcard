@@ -1,7 +1,13 @@
-"""App config response schema — placeholder. See progress.md → Backend — Auth → GET /v1/config."""
+"""App config response schema. See api/CLAUDE.md → App Config Endpoint."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class ConfigResponse(BaseModel):
-    pass
+    model_config = ConfigDict(from_attributes=True)
+
+    min_app_version: str
+    latest_version: str
+    force_update: bool
+    maintenance_mode: bool
+    maintenance_message: str | None
