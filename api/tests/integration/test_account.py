@@ -1,5 +1,5 @@
-"""Integration tests: MVP receipt route stubs (all return 501). See api/CLAUDE.md
-→ "Stub as 501 in MVP" and → Test Structure.
+"""Integration tests: MVP account route stub (DELETE /v1/account returns 501).
+See api/CLAUDE.md → "Stub as 501 in MVP" and → Test Structure.
 """
 
 import logging
@@ -10,8 +10,7 @@ from sqlalchemy import delete
 from app.models.shopping_session import ShoppingSession
 from app.repositories.user_repo import UserRepository
 
-_TEST_PHONE = "+919876543231"
-_FAKE_ID = "00000000-0000-0000-0000-000000000000"
+_TEST_PHONE = "+919876543232"
 
 
 @pytest.fixture(autouse=True)
@@ -35,27 +34,13 @@ async def _auth_headers(client, caplog) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-async def test_upload_receipt_returns_not_implemented(client, caplog):
+async def test_delete_account_returns_not_implemented(client, caplog):
     headers = await _auth_headers(client, caplog)
-    response = await client.post("/v1/receipts", headers=headers)
+    response = await client.delete("/v1/account", headers=headers)
     assert response.status_code == 501
     assert response.json()["error"]["code"] == "NOT_IMPLEMENTED"
 
 
-async def test_get_receipt_returns_not_implemented(client, caplog):
-    headers = await _auth_headers(client, caplog)
-    response = await client.get(f"/v1/receipts/{_FAKE_ID}", headers=headers)
-    assert response.status_code == 501
-    assert response.json()["error"]["code"] == "NOT_IMPLEMENTED"
-
-
-async def test_correct_receipt_item_returns_not_implemented(client, caplog):
-    headers = await _auth_headers(client, caplog)
-    response = await client.patch(f"/v1/receipts/{_FAKE_ID}/items/{_FAKE_ID}", headers=headers)
-    assert response.status_code == 501
-    assert response.json()["error"]["code"] == "NOT_IMPLEMENTED"
-
-
-async def test_upload_receipt_requires_auth(client):
-    response = await client.post("/v1/receipts")
+async def test_delete_account_requires_auth(client):
+    response = await client.delete("/v1/account")
     assert response.status_code == 403
