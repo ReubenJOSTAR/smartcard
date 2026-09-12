@@ -1,6 +1,8 @@
-// Version comparison (must use real semver, not string comparison) — placeholder.
-// See progress.md → Mobile — Utilities and CLAUDE.md § App Versioning.
+// Version comparison — must use real semver, not string comparison.
+// "1.10.0" > "1.9.0" must be true. See root CLAUDE.md §12.
+
+import semver from 'semver'
 
 export function isVersionBelow(currentVersion: string, minVersion: string): boolean {
-  return false
+  return semver.lt(currentVersion, minVersion)
 }

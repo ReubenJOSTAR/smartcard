@@ -6,13 +6,109 @@
 ---
 
 ## 🔖 Next Session Starts Here
-**Task:** Mobile — Foundation (Expo project init, Expo Router v3 layout, app.json/eas.json,
-services/api.ts, expo-secure-store JWT storage, Zustand stores, NetInfo offline listener, app
-version check). This is a **module switch**: everything backend-side that's actually in the MVP
-scope is now done (see below) — root CLAUDE.md's rule is "One module per session — never jump
-between /api and /mobile", so treat this as a clean start in `/mobile`, not a continuation.
-**Module:** mobile (Mobile — Foundation)
-**Notes:** Backend — MVP Stubs shipped this session — `POST /v1/receipts`, `GET /v1/receipts/{id}`,
+**Task:** Mobile — Core Screens: `index.tsx` (home: crash recovery resume prompt, recent
+sessions), `scan.tsx` (CameraView barcode scanner + live bill + budget bar), `history.tsx`
+(paginated past sessions), `session/[id].tsx` (item list, qty controls, finish button +
+ConfirmSheet). Auth Screens are done and the login→otp→tabs flow is wired end to end.
+**Module:** mobile (Mobile — Core Screens)
+**Notes:** Mobile — Auth Screens shipped this session. `app/(auth)/login.tsx` (phone entry, +91
+prefix hardcoded, E.164 validation via a 10-digit regex before enabling submit) and
+`app/(auth)/otp.tsx` (single 6-digit `TextInput` — not 6 separate boxes, mobile/CLAUDE.md's spec
+just says "6-digit input" and doesn't mandate segmented boxes; auto-submits once 6 digits are
+typed; 30s resend cooldown timer; locks the input on `OTP_LOCKED_OUT`) are both real now, wired to
+a new `services/authService.ts` (`sendOtp`/`verifyOtp` + `getApiErrorCode`/`getApiErrorMessage`
+helpers that unwrap the backend's `{error: {code, message, details}}` shape) and to
+`useAuthStore.login()`. All four backend OTP error codes from `api/app/services/auth_service.py`
+are handled with the exact user-facing copy root CLAUDE.md §10 specifies: `OTP_RATE_LIMITED`,
+`OTP_EXPIRED`, `OTP_INVALID`, `OTP_LOCKED_OUT`. Console-logged the root CLAUDE.md §11 Phase-1 auth
+analytics events (`otp_requested`, `login_success`, `login_failed` with reason) per mobile/CLAUDE.md's
+explicit "PostHog wrapper is R2 — use console.log in MVP" instruction — no `services/analytics.ts`
+wrapper file was created, these are plain `console.log` calls inline.
+**Real gap found and fixed (not itemized anywhere, but blocking):** `authStore` only ever held
+auth state in memory — the JWT itself was correctly persisted to `expo-secure-store` by the
+Foundation session, but nothing ever read it back on app relaunch, so every cold start would have
+forced a full OTP re-login even with a still-valid stored token. Added `authStore.hydrate()`
+(reads the stored access token, decodes it, checks `exp` client-side before trusting it) called
+once from `app/_layout.tsx` on mount, plus a redirect effect there that sends the user to `/login`
+or `/` once hydration resolves. **There is no `/v1/auth/refresh` endpoint in the backend at all**
+(api/CLAUDE.md's auth routes are send-otp/verify-otp only) — an expired 24h access token just means
+a full OTP re-login, same fallback path as `api.ts`'s existing 401 interceptor. Not treated as a
+gap to fix — there's nothing to refresh against yet.
+**Known minor gap, not fixed:** there's a brief flash of whatever route Expo Router picks as
+default before the hydration redirect effect fires (SecureStore read + JWT decode, typically well
+under 100ms.) Fixing this properly means wiring `expo-splash-screen`'s
+`preventAutoHideAsync`/`hideAsync` to hold the native splash until hydration resolves — out of
+scope for this session, flagging for whoever next touches `app/_layout.tsx`.
+**Verification:** `npx tsc --noEmit` clean, `npx expo export --platform android` bundled all 1698
+modules successfully. Still no emulator/device/simulator available in this environment — the
+actual login→OTP→home flow has never been run or visually confirmed, only type-checked and
+bundled.
+
+---
+
+## Prior Session Notes (Mobile — Foundation, 2026-09-12)
+Mobile — Foundation shipped. `mobile/` had no `package.json` at all before
+today — the existing `.tsx`/`.ts` files were type-only stubs from the original scaffold session,
+not a real Expo project. Node v24.0.1/npm 11.3.0 were already on the machine.
+**How the project was actually initialized:** rather than hand-writing `package.json`/config from
+memory, `npx create-expo-app@latest` was run once into a throwaway scratchpad dir purely to see
+what current (Expo SDK 57 — well past this model's training data) dependency versions and config
+actually look like, then `mobile/package.json`/`tsconfig.json`/`babel.config.js`/`metro.config.js`
+were hand-written to match, and `npm install` run for real inside `mobile/`. The existing stub file
+tree (`app/(auth)/`, `app/(tabs)/`, `app/session/[id].tsx`, etc.) was left untouched — nothing was
+scaffolded over it.
+**Dependency resolution — expect this graph if touching package.json again:** `nativewind@4.2.6`
+peer-requires `tailwindcss` `>3.3.0` but its own runtime (`react-native-css-interop`) only actually
+works with Tailwind **v3** (v4 is a different architecture) — pinned `tailwindcss: ^3.4.19`, not
+latest. `react-native-css-interop`'s babel preset also unconditionally requires
+`react-native-worklets` to exist (even though we don't use Reanimated animations ourselves) — this
+cascaded into needing `react-native-reanimated` too (css-interop peer-requires it `>=3.6.2`).
+Landed on `react-native-reanimated@4.5.1` + `react-native-worklets@0.10.1` + `react-dom@19.2.3`
+(pinned explicitly to stop npm's peer resolution pulling in latest `react-dom@19.3.0`, which
+demands `react@^19.3.0` and conflicts with what RN 0.86.3/Expo SDK 57 actually want) — this exact
+combination is what `npx expo-doctor` reports as **18/18 checks passed, no issues**, so don't
+"fix" these versions upward without re-running `expo-doctor` after. `npx expo install --fix` is
+useful for future dependency bumps but doesn't know about nativewind's extra requirements — it
+downgraded reanimated/worklets to versions that then failed peer resolution against
+`react-native-css-interop`; had to manually re-pin.
+**`global.d.ts` (new, committed, not gitignored):** `@types/react@19.x` moved the `JSX` namespace
+from a global ambient namespace to `React.JSX`, which broke `JSX.Element` return-type annotations
+in literally every existing stub file (`app/**/*.tsx`, `components/**/*.tsx`) — all written before
+this namespace change existed. Fixed once, project-wide, via the officially-documented shim
+(`declare global { namespace JSX { interface Element extends React.JSX.Element {} ... } }`)
+instead of touching every stub file's return type. `npx tsc --noEmit` is clean project-wide as of
+this session.
+**app.json deviates from root CLAUDE.md §22's literal example** — dropped the `expo-notifications`
+plugin and `NSPhotoLibraryUsageDescription` (receipt upload photo access): both are R2 features
+(push notifications, receipt upload) that root CLAUDE.md §2 explicitly excludes from MVP, and
+§21's rule is "if a future-release feature is tempting to add now... move on" rather than
+half-wire it. Also dropped `icon`/`splash`/`adaptiveIcon` image references since no real brand
+assets exist yet — whoever picks up "MVP Ship → EAS preview build" will need real icon/splash
+files before `eas build` will succeed.
+**`utils/semver.ts` was implemented this session** (not left for the separate "Mobile —
+Utilities" task) since the app version check task directly needs it — thin wrapper around the
+real `semver` npm package, not hand-rolled comparison. `utils/format.ts` (paise → ₹) was left
+untouched/stubbed — nothing in Foundation needed it.
+**Verification performed:** `npx tsc --noEmit` clean, `npx expo-doctor` 18/18, and
+`npx expo export --platform android` successfully bundled all 1696 modules (confirms
+babel.config.js + metro.config.js + NativeWind + expo-router + every new store/service file
+actually resolve and compile together) — `--platform web` was NOT tested (`react-native-web` isn't
+installed; web is not a target platform per root CLAUDE.md's tech stack, Android/iOS via EAS
+only). No physical device, emulator, or simulator is available in this environment, so the app was
+never actually run/visually verified — only that it type-checks and bundles cleanly.
+**Also new this session:** root `.gitignore`'s Node/Expo section got `web-build/`, `expo-env.d.ts`,
+`*.tsbuildinfo`, `.metro-health-check*`, `.kotlin/`, `/mobile/ios/`, `/mobile/android/` added —
+these didn't exist before because there was no real Expo project to generate them.
+`mobile/expo-env.d.ts` exists on disk (needed for `EXPO_PUBLIC_*` env var typing) but is
+intentionally gitignored per Expo's own convention (tooling regenerates it) — don't add it to git.
+`mobile/.env.local` (gitignored, `EXPO_PUBLIC_API_URL=http://localhost:8000`) was created so
+`npx expo start` actually has an API URL to hit — without it every request's `baseURL` is
+`undefined`.
+
+---
+
+## Prior Session Notes (Backend — MVP Stubs, 2026-09-11)
+Backend — MVP Stubs shipped: `POST /v1/receipts`, `GET /v1/receipts/{id}`,
 `PATCH /v1/receipts/{id}/items/{item_id}`, and `DELETE /v1/account` all return a real, auth-gated
 501 `NOT_IMPLEMENTED` response now (previously these routers had zero path operations). All were
 verified live via `docker compose up --build` + curl (401→403 without a token per FastAPI's
@@ -37,11 +133,11 @@ anything DB-dependent) in the background while a migration file is still being e
 Decisions Log 2026-09-10 for why. Running pytest from `api/` needs `PYTHONPATH=.` explicitly set
 (`PYTHONPATH=. .venv/Scripts/pytest.exe tests/ -v`) — there's no `tests/__init__.py` and no
 `pythonpath` entry in `pyproject.toml`'s pytest config, so plain `pytest` fails with
-`ModuleNotFoundError: No module named 'app'`. **Also new this session:** `docker-compose.yml`'s
-`postgres` service now has a named volume (`postgres_data`) — without it, Postgres data lived in
-an anonymous volume that `docker compose down` (even without `-v`) was silently wiping every time,
-forcing a fresh `alembic upgrade head` after every single `down`/`up` cycle. Confirmed fixed: schema
-now survives a `down` → `up` cycle. This doesn't affect CI (fresh container per run either way).
+`ModuleNotFoundError: No module named 'app'`. `docker-compose.yml`'s `postgres` service now has a
+named volume (`postgres_data`) — without it, Postgres data lived in an anonymous volume that
+`docker compose down` (even without `-v`) was silently wiping every time, forcing a fresh
+`alembic upgrade head` after every single `down`/`up` cycle. Confirmed fixed: schema now survives a
+`down` → `up` cycle. This doesn't affect CI (fresh container per run either way).
 
 ---
 
@@ -130,19 +226,28 @@ now survives a `down` → `up` cycle. This doesn't affect CI (fresh container pe
 - ✅ Integration: product lookup — `tests/integration/test_products.py`
 
 ### Mobile — Foundation
-- ⏳ Expo project init (EAS managed, TypeScript, NativeWind v4)
-- ⏳ Expo Router v3 layout (auth group, tabs group, session routes)
-- ⏳ app.json + eas.json (permissions, bundle IDs, build profiles)
-- ⏳ SafeAreaProvider + StatusBar in root layout
-- ⏳ services/api.ts (axios, JWT injection, 401 handler, 8s timeout)
-- ⏳ expo-secure-store JWT storage
-- ⏳ Zustand: authStore, sessionStore (with AsyncStorage persist), uiStore
-- ⏳ NetInfo offline listener + OfflineBanner component
-- ⏳ App version check on launch (GET /v1/config + semver)
+- ✅ Expo project init (EAS managed, TypeScript, NativeWind v4 — SDK 57/RN 0.86.3/React 19.2.3,
+  see 🔖 Next Session Starts Here for the exact dependency graph and why)
+- ✅ Expo Router v3 layout (auth group, tabs group, session routes — the route structure/stub
+  screens already existed from the scaffold session; `app/_layout.tsx` itself is now real)
+- ✅ app.json + eas.json (permissions, bundle IDs, build profiles — deviates from root
+  CLAUDE.md §22's literal example by dropping expo-notifications/photo-library permission, R2 scope)
+- ✅ SafeAreaProvider + StatusBar in root layout
+- ✅ services/api.ts (axios, JWT injection, 401 handler → clear tokens + redirect to /login,
+  8s timeout, 2x backoff retry on network errors only — never on 4xx/5xx)
+- ✅ expo-secure-store JWT storage (services/tokenStorage.ts — new file, not previously named
+  in the tree)
+- ✅ Zustand: authStore, sessionStore (with AsyncStorage persist via zustand/middleware,
+  partialized to just activeSession), uiStore
+- ✅ NetInfo offline listener + OfflineBanner component (wired in app/_layout.tsx, rendered
+  above the Stack so it's visible on every screen per root CLAUDE.md §7)
+- ✅ App version check on launch (GET /v1/config + real semver comparison via utils/semver.ts,
+  not string comparison) — maintenance_mode and force_update each block all navigation via an
+  early return before the Stack ever mounts
 
 ### Mobile — Auth Screens
-- ⏳ login.tsx (phone input, +91 prefix, E.164 format)
-- ⏳ otp.tsx (6-digit input, 30s resend cooldown, lockout UI)
+- ✅ login.tsx (phone input, +91 prefix, E.164 format)
+- ✅ otp.tsx (6-digit input, 30s resend cooldown, lockout UI)
 
 ### Mobile — Core Screens
 - ⏳ index.tsx (home: crash recovery resume prompt, recent sessions)
@@ -264,6 +369,12 @@ now survives a `down` → `up` cycle. This doesn't affect CI (fresh container pe
 | 2026-09-11 | All four MVP stub routes (`POST /v1/receipts`, `GET /v1/receipts/{id}`, `PATCH /v1/receipts/{id}/items/{item_id}`, `DELETE /v1/account`) sit behind the JWT `get_current_user_id` dependency, returning 403 before ever reaching the 501, even though root CLAUDE.md's literal stub pseudocode (§3) shows no auth check | These are all user-scoped resources in their real R2 form (a user's own receipts, a user's own account) — the whole point of writing the mobile client against these routes now is so nothing about the contract changes when R2 ships, and R2's real versions will certainly require auth. Stubbing them open now and adding auth later *would* be the exact kind of client-facing contract change these stubs exist to prevent |
 | 2026-09-11 | Used a single error code `NOT_IMPLEMENTED` (not in api/CLAUDE.md's "Standard error codes for Phase 1" list) for all four 501 stub responses | The existing standard-code list has nothing for "this route exists but isn't built yet" — every other code describes a real business-rule failure. `NOT_IMPLEMENTED` follows the same SCREAMING_SNAKE_CASE convention and is unambiguous; flagging here since it's a new addition to the code vocabulary, for whoever implements R2 to replace these usages with real codes |
 | 2026-09-11 | Added a named volume (`postgres_data:/var/lib/postgresql/data`) to the `postgres` service in root `docker-compose.yml`, plus a top-level `volumes:` block | Discovered mid-session: `docker-compose.yml` never declared a volume for Postgres, so its data lived in an anonymous volume tied to the container. `docker compose down` (even *without* `-v`) was silently destroying that data every time, meaning every full-stack verification in every session had to start with a fresh `alembic upgrade head` — and worse, this would happen to Reuben's own local data on any ordinary `docker compose down`, not just during Claude Code sessions. Verified the fix: created a session, ran `docker compose down` → `up`, confirmed via `psql \dt` that all 9 application tables + `alembic_version` survived. Root CLAUDE.md's docker-compose.yml example (§4) doesn't show a volume either — this is a deliberate, minimal deviation from the literal example, not an oversight of it |
+| 2026-09-12 | `mobile/` initialized on Expo SDK 57 / React Native 0.86.3 / React 19.2.3 — not any version this model was trained on. Package versions were sourced live from the npm registry (`npm view <pkg> version`), and `npx create-expo-app@latest` was run once into a scratch directory purely as a reference for what a working current config looks like, rather than hand-writing config from (stale) memory | Guessing exact compatible versions for a fast-moving native toolchain (Expo/RN/React/Metro all version-locked to each other) from training data this far out of date would very likely have produced a project that fails to install or bundle. Confirmed working via `npx expo-doctor` (18/18) and `npx expo export --platform android` (1696 modules bundled successfully) |
+| 2026-09-12 | Pinned exact versions for `tailwindcss` (`^3.4.19`, not the current major v4), `react-native-reanimated` (`4.5.1`), `react-native-worklets` (`0.10.1`), and added an explicit `react-dom` (`19.2.3`) dependency that nothing in mobile/CLAUDE.md ever asked for | `nativewind@4.2.6`'s runtime (`react-native-css-interop`) only works with Tailwind v3's architecture despite its peer range technically allowing v4. Its babel preset also unconditionally `require`s `react-native-worklets/plugin`, and separately peer-requires `react-native-reanimated >=3.6.2` — neither optional, both undocumented in nativewind's own README, discovered only by reading its installed source and iterating through `npm install` ERESOLVE errors. `react-dom` had to be pinned because npm's peer resolution kept trying to satisfy `@expo/ui`'s optional web peer with the *latest* react-dom (19.3.0), which demands `react@^19.3.0` and conflicts with the react version RN 0.86.3/Expo SDK 57 actually expect (19.2.3) |
+| 2026-09-12 | Added `mobile/global.d.ts` (committed) with the officially-documented `declare global { namespace JSX { ... } }` shim, rather than changing every existing stub file's `JSX.Element` return type | `@types/react@19.x` moved the `JSX` namespace from a global ambient namespace to `React.JSX`, which broke `JSX.Element` return-type annotations across every single existing `.tsx` stub file (all written before this typing change existed upstream). A one-time global shim fixes every file at once without touching files outside this session's scope (root CLAUDE.md §17's "never rewrite files you haven't read this session" rule) |
+| 2026-09-12 | `app.json` omits the `expo-notifications` plugin and `NSPhotoLibraryUsageDescription`, and omits `icon`/`splash`/`adaptiveIcon` image references entirely, despite root CLAUDE.md §22's example config including all of them | Push notifications and receipt upload (the only reason for photo-library access) are both explicitly R2, and root CLAUDE.md §21 says a tempting future-release feature should get a `// TODO(r2)` and be moved past, not half-wired in now. Icon/splash images were skipped because no real brand assets exist yet — inventing placeholder binary image files isn't this session's job. Whoever picks up "MVP Ship → EAS preview build" will need real icon/splash assets before `eas build` succeeds |
+| 2026-09-12 | Added `authStore.hydrate()` (reads the stored JWT from `expo-secure-store` on app launch, decodes it, checks `exp` client-side) plus a redirect effect in `app/_layout.tsx`, even though neither was an itemized Auth Screens task | Without it, the Foundation session's JWT persistence would have been dead code — the token was correctly saved to `expo-secure-store` on login, but nothing ever read it back on relaunch, so every cold start would force a full OTP re-login regardless of a still-valid stored session. Discovered while wiring `otp.tsx` to `useAuthStore.login()` and realizing there was no code path that could ever land a returning user anywhere but the login screen |
+| 2026-09-12 | No token-refresh flow was built despite the access token expiring in 24h | `api/CLAUDE.md`'s auth routes are `send-otp`/`verify-otp` only — there is no `/v1/auth/refresh` endpoint on the backend to call. An expired access token falls back to a full OTP re-login via the existing `api.ts` 401 interceptor (clear tokens → redirect to `/login`), which is the correct behavior given what the backend actually supports today |
 
 ## Blockers Log
 | Date | Blocker | Status |

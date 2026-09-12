@@ -1,0 +1,26 @@
+{
+  "expo": {
+    "name": "SmartCart",
+    "slug": "smartcart",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "smartcart",
+    "userInterfaceStyle": "automatic",
+    "plugins": [
+      "expo-router",
+      ["expo-camera", { "cameraPermission": "SmartCart uses your camera to scan product barcodes." }],
+      "expo-secure-store"
+    ],
+    "ios": {
+      "bundleIdentifier": "com.smartcart.app",
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSCameraUsageDescription": "SmartCart uses your camera to scan product barcodes."
+      }
+    },
+    "android": {
+      "package": "com.smartcart.app",
+      "permissions": ["android.permission.CAMERA"]
+    }
+  }
+}

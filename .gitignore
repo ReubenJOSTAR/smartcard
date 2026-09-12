@@ -18,6 +18,13 @@ htmlcov/
 node_modules/
 .expo/
 dist/
+web-build/
+expo-env.d.ts
+*.tsbuildinfo
+.metro-health-check*
+.kotlin/
+/mobile/ios/
+/mobile/android/
 *.jks
 *.p8
 *.p12
